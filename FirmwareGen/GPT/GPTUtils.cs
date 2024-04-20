@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -32,7 +32,7 @@ namespace FirmwareGen.GPT
 
             InjectWindowsPartitions(Partitions, SectorSize, 4, SplitInHalf, AndroidDesiredSpace);
 
-            return MakeGPT(FirstLBA, LastLBA, SectorSize, [.. Partitions], DiskGuid, PartitionArrayLBACount: PartitionArrayLBACount, IsBackupGPT: IsBackupGPT);
+            return MakeGPT(FirstLBA, LastLBA, SectorSize, Partitions.ToArray(), DiskGuid, PartitionArrayLBACount: PartitionArrayLBACount, IsBackupGPT: IsBackupGPT);
         }
 
         private static void InjectWindowsPartitions(List<GPTPartition> Partitions, ulong SectorSize, ulong BlockSize, bool SplitInHalf, ulong AndroidDesiredSpace = 4_294_967_296)
@@ -231,7 +231,7 @@ namespace FirmwareGen.GPT
                 PartitionArrayCRC32 = 0
             };
 
-            List<byte> PartitionTableBuffer = [];
+            List<byte> PartitionTableBuffer = new();
             for (int i = 0; i < Partitions.Length; i++)
             {
                 PartitionTableBuffer.AddRange(Partitions[i].TypeGUID.ToByteArray());
@@ -244,26 +244,26 @@ namespace FirmwareGen.GPT
             }
             PartitionTableBuffer.AddRange(new byte[(Header.PartitionEntrySize * Header.PartitionEntryCount) - (ulong)(long)PartitionTableBuffer.Count]);
 
-            uint PartitionTableCRC32 = CRC32.Compute([.. PartitionTableBuffer], 0, (uint)PartitionTableBuffer.Count);
+            uint PartitionTableCRC32 = CRC32.Compute(PartitionTableBuffer.ToArray(), 0, (uint)PartitionTableBuffer.Count);
             Header.PartitionArrayCRC32 = PartitionTableCRC32;
 
             byte[] HeaderBuffer =
-            [
-                .. Encoding.ASCII.GetBytes(Header.Signature),
-                .. BitConverter.GetBytes(Header.Revision),
-                .. BitConverter.GetBytes(Header.Size),
-                .. BitConverter.GetBytes(Header.CRC32),
-                .. BitConverter.GetBytes(Header.Reserved),
-                .. BitConverter.GetBytes(Header.CurrentLBA),
-                .. BitConverter.GetBytes(Header.BackupLBA),
-                .. BitConverter.GetBytes(Header.FirstUsableLBA),
-                .. BitConverter.GetBytes(Header.LastUsableLBA),
-                .. Header.DiskGUID.ToByteArray(),
-                .. BitConverter.GetBytes(Header.PartitionArrayLBA),
-                .. BitConverter.GetBytes(Header.PartitionEntryCount),
-                .. BitConverter.GetBytes(Header.PartitionEntrySize),
-                .. BitConverter.GetBytes(Header.PartitionArrayCRC32),
-            ];
+            {
+                Encoding.ASCII.GetBytes(Header.Signature),
+                BitConverter.GetBytes(Header.Revision),
+                BitConverter.GetBytes(Header.Size),
+                BitConverter.GetBytes(Header.CRC32),
+                BitConverter.GetBytes(Header.Reserved),
+                BitConverter.GetBytes(Header.CurrentLBA),
+                BitConverter.GetBytes(Header.BackupLBA),
+                BitConverter.GetBytes(Header.FirstUsableLBA),
+                BitConverter.GetBytes(Header.LastUsableLBA),
+                Header.DiskGUID.ToByteArray(),
+                BitConverter.GetBytes(Header.PartitionArrayLBA),
+                BitConverter.GetBytes(Header.PartitionEntryCount),
+                BitConverter.GetBytes(Header.PartitionEntrySize),
+                BitConverter.GetBytes(Header.PartitionArrayCRC32),
+            };
 
             Header.CRC32 = CRC32.Compute(HeaderBuffer, 0, (uint)HeaderBuffer.Length);
             byte[] bytes = BitConverter.GetBytes(Header.CRC32);
@@ -276,7 +276,7 @@ namespace FirmwareGen.GPT
             byte[] HeaderPaddingBuffer = new byte[(int)(SectorSize - (uint)HeaderBuffer.Length)];
             byte[] PartitionTablePaddingBuffer = new byte[(int)((PartitionArrayLBACount * SectorSize) - (uint)PartitionTableBuffer.Count)];
 
-            List<byte> GPTBuffer = [];
+            List<byte> GPTBuffer = new();
             if (IsBackupGPT)
             {
                 GPTBuffer.AddRange(PartitionTableBuffer);
@@ -294,7 +294,7 @@ namespace FirmwareGen.GPT
                 GPTBuffer.AddRange(PartitionTablePaddingBuffer);
             }
 
-            return [.. GPTBuffer];
+            return GPTBuffer.ToArray();
         }
     }
 }
