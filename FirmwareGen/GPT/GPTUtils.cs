@@ -7,148 +7,148 @@ namespace FirmwareGen.GPT
 {
     internal class GPTUtils
     {
-        internal static byte[] MakeGPT(ulong DiskSize, ulong SectorSize, GPTPartition[] DefaultPartitionTable, Guid DiskGuid, bool IsBackupGPT = false, bool SplitInHalf = true, ulong AndroidDesiredSpace = 4_294_967_296)
+        internal static byte[] MakeGPT(ulong diskSize, ulong sectorSize, GPTPartition[] defaultPartitionTable, Guid diskGuid, bool isBackupGPT = false, bool splitInHalf = true, ulong androidDesiredSpace = 4_294_967_296)
         {
-            ulong FirstLBA = 1;
-            ulong LastLBA = (DiskSize / SectorSize) - 1;
+            ulong firstLBA = 1;
+            ulong lastLBA = (diskSize / sectorSize) - 1;
 
-            ulong PartitionArrayLBACount = 4;
+            ulong partitionArrayLBACount = 4;
 
-            if ((ulong)DefaultPartitionTable.Length * 128 > PartitionArrayLBACount * SectorSize)
+            if ((ulong)defaultPartitionTable.Length * 128 > partitionArrayLBACount * sectorSize)
             {
                 throw new Exception("Unsupported Configuration, too many partitions to fit. File an issue");
             }
 
-            ulong TotalGPTLBACount = 1 /* GPT Header */ + PartitionArrayLBACount /* Partition Table */;
-            ulong LastUsableLBA = LastLBA - TotalGPTLBACount;
+            ulong totalGPTLBACount = 1 /* GPT Header */ + partitionArrayLBACount /* Partition Table */;
+            ulong lastUsableLBA = lastLBA - totalGPTLBACount;
 
-            List<GPTPartition> Partitions = new(DefaultPartitionTable);
-            Partitions[^1].LastLBA = LastUsableLBA;
+            List<GPTPartition> partitions = new(defaultPartitionTable);
+            partitions[^1].LastLBA = lastUsableLBA;
 
-            if (AndroidDesiredSpace < 4_294_967_296)
+            if (androidDesiredSpace < 4_294_967_296)
             {
                 throw new Exception("ERROR");
             }
 
-            InjectWindowsPartitions(Partitions, SectorSize, 4, SplitInHalf, AndroidDesiredSpace);
+            InjectWindowsPartitions(partitions, sectorSize, 4, splitInHalf, androidDesiredSpace);
 
-            return MakeGPT(FirstLBA, LastLBA, SectorSize, Partitions.ToArray(), DiskGuid, PartitionArrayLBACount: PartitionArrayLBACount, IsBackupGPT: IsBackupGPT);
+            return MakeGPT(firstLBA, lastLBA, sectorSize, partitions.ToArray(), diskGuid, partitionArrayLBACount: partitionArrayLBACount, isBackupGPT: isBackupGPT);
         }
 
-        private static void InjectWindowsPartitions(List<GPTPartition> Partitions, ulong SectorSize, ulong BlockSize, bool SplitInHalf, ulong AndroidDesiredSpace = 4_294_967_296)
+        private static void InjectWindowsPartitions(List<GPTPartition> partitions, ulong sectorSize, ulong blockSize, bool splitInHalf, ulong androidDesiredSpace = 4_294_967_296)
         {
-            ulong FirstUsableLBA = Partitions.Last().FirstLBA;
-            ulong LastUsableLBA = Partitions.Last().LastLBA;
+            ulong firstUsableLBA = partitions.Last().FirstLBA;
+            ulong lastUsableLBA = partitions.Last().LastLBA;
 
-            if (LastUsableLBA % BlockSize != 0)
+            if (lastUsableLBA % blockSize != 0)
             {
-                LastUsableLBA -= LastUsableLBA % BlockSize;
+                lastUsableLBA -= lastUsableLBA % blockSize;
             }
 
-            ulong UsableLBACount = LastUsableLBA - FirstUsableLBA + 1;
+            ulong usableLBACount = lastUsableLBA - firstUsableLBA + 1;
 
-            ulong SixtyFourGigaBytes = 68_719_476_736 / SectorSize;
+            ulong sixtyFourGigaBytes = 68_719_476_736 / sectorSize;
 
-            ulong ESPLBACount = 65525 + 1024 + 1 /* Cluster Size Limit for FAT32 */;
-            if (ESPLBACount % BlockSize != 0)
+            ulong espLBACount = 65525 + 1024 + 1 /* Cluster Size Limit for FAT32 */;
+            if (espLBACount % blockSize != 0)
             {
-                ESPLBACount += BlockSize - (ESPLBACount % BlockSize);
+                espLBACount += blockSize - (espLBACount % blockSize);
             }
 
-            ulong WindowsLBACount;
+            ulong windowsLBACount;
 
             /* Strategy to reserve half for Android, half for Windows */
-            if (SplitInHalf)
+            if (splitInHalf)
             {
-                ulong AndroidOtherLUNLBAUsage = 8_679_372 /* Size taken in Android by another LUN that counts towards Android space utilization */;
-                WindowsLBACount = (UsableLBACount + AndroidOtherLUNLBAUsage - ESPLBACount) / 2;
+                ulong androidOtherLUNLBAUsage = 8_679_372 /* Size taken in Android by another LUN that counts towards Android space utilization */;
+                windowsLBACount = (usableLBACount + androidOtherLUNLBAUsage - espLBACount) / 2;
 
-                if (WindowsLBACount < SixtyFourGigaBytes)
+                if (windowsLBACount < sixtyFourGigaBytes)
                 {
-                    WindowsLBACount = SixtyFourGigaBytes;
+                    windowsLBACount = sixtyFourGigaBytes;
                 }
 
                 // In the case of the 4GB for Android strategy, we cannot do this or we risk to get userdata < 4GB
-                if (WindowsLBACount % BlockSize != 0)
+                if (windowsLBACount % blockSize != 0)
                 {
-                    WindowsLBACount += BlockSize - (WindowsLBACount % BlockSize);
+                    windowsLBACount += blockSize - (windowsLBACount % blockSize);
                 }
             }
             /* Strategy to reserve 4GB for Android Only */
             else
             {
-                ulong FourGigaBytes = AndroidDesiredSpace / SectorSize;
-                WindowsLBACount = UsableLBACount - ESPLBACount - FourGigaBytes;
+                ulong fourGigaBytes = androidDesiredSpace / sectorSize;
+                windowsLBACount = usableLBACount - espLBACount - fourGigaBytes;
 
-                if (WindowsLBACount < SixtyFourGigaBytes)
+                if (windowsLBACount < sixtyFourGigaBytes)
                 {
-                    WindowsLBACount = SixtyFourGigaBytes;
+                    windowsLBACount = sixtyFourGigaBytes;
                 }
 
-                if (WindowsLBACount % BlockSize != 0)
+                if (windowsLBACount % blockSize != 0)
                 {
-                    WindowsLBACount -= WindowsLBACount % BlockSize;
+                    windowsLBACount -= windowsLBACount % blockSize;
                 }
             }
 
-            ulong TotalInjectedLBACount = ESPLBACount + WindowsLBACount;
+            ulong totalInjectedLBACount = espLBACount + windowsLBACount;
 
-            ulong ESPFirstLBA = LastUsableLBA - TotalInjectedLBACount;
-            ulong ESPLastLBA = ESPFirstLBA + ESPLBACount - 1;
+            ulong espFirstLBA = lastUsableLBA - totalInjectedLBACount;
+            ulong espLastLBA = espFirstLBA + espLBACount - 1;
 
-            ulong WindowsFirstLBA = ESPLastLBA + 1;
-            ulong WindowsLastLBA = ESPLastLBA + WindowsLBACount;
+            ulong windowsFirstLBA = espLastLBA + 1;
+            ulong windowsLastLBA = espLastLBA + windowsLBACount;
 
-            if (ESPFirstLBA % BlockSize != 0)
+            if (espFirstLBA % blockSize != 0)
             {
-                ulong Padding = BlockSize - (ESPFirstLBA % BlockSize);
-                throw new Exception("ESPFirstLBA overflew block alignment by: " + Padding);
+                ulong padding = blockSize - (espFirstLBA % blockSize);
+                throw new Exception("ESPFirstLBA overflew block alignment by: " + padding);
             }
 
-            if ((ESPLastLBA + 1) % BlockSize != 0)
+            if ((espLastLBA + 1) % blockSize != 0)
             {
-                ulong Padding = BlockSize - ((ESPLastLBA + 1) % BlockSize);
-                throw new Exception("ESPLastLBA + 1 overflew block alignment by: " + Padding);
+                ulong padding = blockSize - ((espLastLBA + 1) % blockSize);
+                throw new Exception("ESPLastLBA + 1 overflew block alignment by: " + padding);
             }
 
-            if (WindowsFirstLBA % BlockSize != 0)
+            if (windowsFirstLBA % blockSize != 0)
             {
-                ulong Padding = BlockSize - (WindowsFirstLBA % BlockSize);
-                throw new Exception("WindowsFirstLBA overflew block alignment by: " + Padding);
+                ulong padding = blockSize - (windowsFirstLBA % blockSize);
+                throw new Exception("WindowsFirstLBA overflew block alignment by: " + padding);
             }
 
-            if ((WindowsLastLBA + 1) % BlockSize != 0)
+            if ((windowsLastLBA + 1) % blockSize != 0)
             {
-                ulong Padding = BlockSize - ((WindowsLastLBA + 1) % BlockSize);
-                throw new Exception("WindowsLastLBA + 1 overflew block alignment by: " + Padding);
+                ulong padding = blockSize - ((windowsLastLBA + 1) % blockSize);
+                throw new Exception("WindowsLastLBA + 1 overflew block alignment by: " + padding);
             }
 
-            Partitions.Add(new()
+            partitions.Add(new()
             {
                 TypeGUID = new Guid("c12a7328-f81f-11d2-ba4b-00a0c93ec93b"),
                 UID = new Guid("dec2832a-5f6c-430a-bd85-42551bce7b91"),
-                FirstLBA = ESPFirstLBA,
-                LastLBA = ESPLastLBA,
+                FirstLBA = espFirstLBA,
+                LastLBA = espLastLBA,
                 Attributes = 0,
                 Name = "esp"
             });
 
-            Partitions.Add(new()
+            partitions.Add(new()
             {
                 TypeGUID = new Guid("ebd0a0a2-b9e5-4433-87c0-68b6b72699c7"),
                 UID = new Guid("92dee62d-ed67-4ec3-9daa-c9a4bce2c355"),
-                FirstLBA = WindowsFirstLBA,
-                LastLBA = WindowsLastLBA,
+                FirstLBA = windowsFirstLBA,
+                LastLBA = windowsLastLBA,
                 Attributes = 0,
                 Name = "win"
             });
 
-            Partitions[^3].LastLBA = ESPFirstLBA - 1;
+            partitions[^3].LastLBA = espFirstLBA - 1;
 
             ConsoleColor ogColor = Console.ForegroundColor;
 
-            ulong androidSpaceInBytes = (Partitions[^3].LastLBA - Partitions[^3].FirstLBA) * SectorSize;
-            ulong windowsSpaceInBytes = (Partitions[^1].LastLBA - Partitions[^1].FirstLBA) * SectorSize;
+            ulong androidSpaceInBytes = (partitions[^3].LastLBA - partitions[^3].FirstLBA) * sectorSize;
+            ulong windowsSpaceInBytes = (partitions[^1].LastLBA - partitions[^1].FirstLBA) * sectorSize;
 
             Console.WriteLine("Resulting Allocation after Computation, Compatibility Checks and Corrections:");
             Console.WriteLine();
@@ -162,18 +162,18 @@ namespace FirmwareGen.GPT
             Console.ForegroundColor = ConsoleColor.Green;
 
             Console.WriteLine();
-            Console.WriteLine($"mkpart {Partitions[^3].Name} ext4 {Partitions[^3].FirstLBA}s {Partitions[^3].LastLBA}s");
+            Console.WriteLine($"mkpart {partitions[^3].Name} ext4 {partitions[^3].FirstLBA}s {partitions[^3].LastLBA}s");
             Console.WriteLine();
-            Console.WriteLine($"mkpart {Partitions[^2].Name} fat32 {Partitions[^2].FirstLBA}s {Partitions[^2].LastLBA}s");
+            Console.WriteLine($"mkpart {partitions[^2].Name} fat32 {partitions[^2].FirstLBA}s {partitions[^2].LastLBA}s");
             Console.WriteLine();
-            //Console.WriteLine($"mkpart {Partitions[^1].Name} ntfs {Partitions[^1].FirstLBA}s {Math.Truncate(Partitions[^1].LastLBA * SectorSize / (double)(1000 * 1000 * 1000))}GB");
-            Console.WriteLine($"mkpart {Partitions[^1].Name} ntfs {Partitions[^1].FirstLBA}s {Partitions[^1].LastLBA}s");
+            //Console.WriteLine($"mkpart {partitions[^1].Name} ntfs {partitions[^1].FirstLBA}s {Math.Truncate(partitions[^1].LastLBA * sectorSize / (double)(1000 * 1000 * 1000))}GB");
+            Console.WriteLine($"mkpart {partitions[^1].Name} ntfs {partitions[^1].FirstLBA}s {partitions[^1].LastLBA}s");
             Console.WriteLine();
 
             Console.ForegroundColor = ogColor;
         }
 
-        private static byte[] MakeGPT(ulong FirstLBA, ulong LastLBA, ulong SectorSize, GPTPartition[] Partitions, Guid DiskGuid, ulong PartitionArrayLBACount = 4, bool IsBackupGPT = false)
+        private static byte[] MakeGPT(ulong firstLBA, ulong lastLBA, ulong sectorSize, GPTPartition[] partitions, Guid diskGuid, ulong partitionArrayLBACount = 4, bool isBackupGPT = false)
         {
             // -------------------
             // 0: Reserved/MBR
@@ -197,104 +197,104 @@ namespace FirmwareGen.GPT
             // -0: Backup GPT Header
             // -------------------
 
-            ulong TotalGPTLBACount = 1 /* GPT Header */ + PartitionArrayLBACount /* Partition Table */;
+            ulong totalGPTLBACount = 1 /* GPT Header */ + partitionArrayLBACount /* Partition Table */;
 
-            ulong FirstUsableLBA = FirstLBA + TotalGPTLBACount;
-            ulong LastUsableLBA = LastLBA - TotalGPTLBACount;
+            ulong firstUsableLBA = firstLBA + totalGPTLBACount;
+            ulong lastUsableLBA = lastLBA - totalGPTLBACount;
 
-            uint PartitionEntryCount;
+            uint partitionEntryCount;
 
-            if ((uint)Partitions.Length > 128)
+            if ((uint)partitions.Length > 128)
             {
                 throw new Exception("Unsupported Configuration, too many partitions than supported, please file an issue.");
             }
             else
             {
-                PartitionEntryCount = (uint)Partitions.Length > 64 ? 128 : (uint)Partitions.Length > 32 ? 64 : (uint)32;
+                partitionEntryCount = (uint)partitions.Length > 64 ? 128 : (uint)partitions.Length > 32 ? 64 : (uint)32;
             }
 
-            GPTHeader Header = new()
+            GPTHeader header = new()
             {
                 Signature = "EFI PART",
                 Revision = 0x10000,
                 Size = 92,
                 CRC32 = 0,
                 Reserved = 0,
-                CurrentLBA = IsBackupGPT ? LastLBA : FirstLBA,
-                BackupLBA = IsBackupGPT ? FirstLBA : LastLBA,
-                FirstUsableLBA = FirstUsableLBA,
-                LastUsableLBA = LastUsableLBA,
-                DiskGUID = DiskGuid,
-                PartitionArrayLBA = IsBackupGPT ? LastLBA - TotalGPTLBACount + 1 : FirstLBA + 1,
-                PartitionEntryCount = PartitionEntryCount,
+                CurrentLBA = isBackupGPT ? lastLBA : firstLBA,
+                BackupLBA = isBackupGPT ? firstLBA : lastLBA,
+                FirstUsableLBA = firstUsableLBA,
+                LastUsableLBA = lastUsableLBA,
+                DiskGUID = diskGuid,
+                PartitionArrayLBA = isBackupGPT ? lastLBA - totalGPTLBACount + 1 : firstLBA + 1,
+                PartitionEntryCount = partitionEntryCount,
                 PartitionEntrySize = 128,
                 PartitionArrayCRC32 = 0
             };
 
-            List<byte> PartitionTableBuffer = new();
-            for (int i = 0; i < Partitions.Length; i++)
+            List<byte> partitionTableBuffer = new();
+            for (int i = 0; i < partitions.Length; i++)
             {
-                PartitionTableBuffer.AddRange(Partitions[i].TypeGUID.ToByteArray());
-                PartitionTableBuffer.AddRange(Partitions[i].UID.ToByteArray());
-                PartitionTableBuffer.AddRange(BitConverter.GetBytes(Partitions[i].FirstLBA));
-                PartitionTableBuffer.AddRange(BitConverter.GetBytes(Partitions[i].LastLBA));
-                PartitionTableBuffer.AddRange(BitConverter.GetBytes(Partitions[i].Attributes));
-                PartitionTableBuffer.AddRange(Encoding.Unicode.GetBytes(Partitions[i].Name));
-                PartitionTableBuffer.AddRange(new byte[(Header.PartitionEntrySize * (ulong)(long)(i + 1)) - (ulong)(long)PartitionTableBuffer.Count]);
+                partitionTableBuffer.AddRange(partitions[i].TypeGUID.ToByteArray());
+                partitionTableBuffer.AddRange(partitions[i].UID.ToByteArray());
+                partitionTableBuffer.AddRange(BitConverter.GetBytes(partitions[i].FirstLBA));
+                partitionTableBuffer.AddRange(BitConverter.GetBytes(partitions[i].LastLBA));
+                partitionTableBuffer.AddRange(BitConverter.GetBytes(partitions[i].Attributes));
+                partitionTableBuffer.AddRange(Encoding.Unicode.GetBytes(partitions[i].Name));
+                partitionTableBuffer.AddRange(new byte[(header.PartitionEntrySize * (ulong)(long)(i + 1)) - (ulong)(long)partitionTableBuffer.Count]);
             }
-            PartitionTableBuffer.AddRange(new byte[(Header.PartitionEntrySize * Header.PartitionEntryCount) - (ulong)(long)PartitionTableBuffer.Count]);
+            partitionTableBuffer.AddRange(new byte[(header.PartitionEntrySize * header.PartitionEntryCount) - (ulong)(long)partitionTableBuffer.Count]);
 
-            uint PartitionTableCRC32 = CRC32.Compute(PartitionTableBuffer.ToArray(), 0, (uint)PartitionTableBuffer.Count);
-            Header.PartitionArrayCRC32 = PartitionTableCRC32;
+            uint partitionTableCRC32 = CRC32.Compute(partitionTableBuffer.ToArray(), 0, (uint)partitionTableBuffer.Count);
+            header.PartitionArrayCRC32 = partitionTableCRC32;
 
-            byte[] HeaderBuffer =
+            byte[] headerBuffer =
             {
-                Encoding.ASCII.GetBytes(Header.Signature),
-                BitConverter.GetBytes(Header.Revision),
-                BitConverter.GetBytes(Header.Size),
-                BitConverter.GetBytes(Header.CRC32),
-                BitConverter.GetBytes(Header.Reserved),
-                BitConverter.GetBytes(Header.CurrentLBA),
-                BitConverter.GetBytes(Header.BackupLBA),
-                BitConverter.GetBytes(Header.FirstUsableLBA),
-                BitConverter.GetBytes(Header.LastUsableLBA),
-                Header.DiskGUID.ToByteArray(),
-                BitConverter.GetBytes(Header.PartitionArrayLBA),
-                BitConverter.GetBytes(Header.PartitionEntryCount),
-                BitConverter.GetBytes(Header.PartitionEntrySize),
-                BitConverter.GetBytes(Header.PartitionArrayCRC32),
+                Encoding.ASCII.GetBytes(header.Signature),
+                BitConverter.GetBytes(header.Revision),
+                BitConverter.GetBytes(header.Size),
+                BitConverter.GetBytes(header.CRC32),
+                BitConverter.GetBytes(header.Reserved),
+                BitConverter.GetBytes(header.CurrentLBA),
+                BitConverter.GetBytes(header.BackupLBA),
+                BitConverter.GetBytes(header.FirstUsableLBA),
+                BitConverter.GetBytes(header.LastUsableLBA),
+                header.DiskGUID.ToByteArray(),
+                BitConverter.GetBytes(header.PartitionArrayLBA),
+                BitConverter.GetBytes(header.PartitionEntryCount),
+                BitConverter.GetBytes(header.PartitionEntrySize),
+                BitConverter.GetBytes(header.PartitionArrayCRC32),
             };
 
-            Header.CRC32 = CRC32.Compute(HeaderBuffer, 0, (uint)HeaderBuffer.Length);
-            byte[] bytes = BitConverter.GetBytes(Header.CRC32);
+            header.CRC32 = CRC32.Compute(headerBuffer, 0, (uint)headerBuffer.Length);
+            byte[] bytes = BitConverter.GetBytes(header.CRC32);
 
-            HeaderBuffer[16] = bytes[0];
-            HeaderBuffer[17] = bytes[1];
-            HeaderBuffer[18] = bytes[2];
-            HeaderBuffer[19] = bytes[3];
+            headerBuffer[16] = bytes[0];
+            headerBuffer[17] = bytes[1];
+            headerBuffer[18] = bytes[2];
+            headerBuffer[19] = bytes[3];
 
-            byte[] HeaderPaddingBuffer = new byte[(int)(SectorSize - (uint)HeaderBuffer.Length)];
-            byte[] PartitionTablePaddingBuffer = new byte[(int)((PartitionArrayLBACount * SectorSize) - (uint)PartitionTableBuffer.Count)];
+            byte[] headerPaddingBuffer = new byte[(int)(sectorSize - (uint)headerBuffer.Length)];
+            byte[] partitionTablePaddingBuffer = new byte[(int)((partitionArrayLBACount * sectorSize) - (uint)partitionTableBuffer.Count)];
 
-            List<byte> GPTBuffer = new();
-            if (IsBackupGPT)
+            List<byte> gptBuffer = new();
+            if (isBackupGPT)
             {
-                GPTBuffer.AddRange(PartitionTableBuffer);
-                GPTBuffer.AddRange(PartitionTablePaddingBuffer);
+                gptBuffer.AddRange(partitionTableBuffer);
+                gptBuffer.AddRange(partitionTablePaddingBuffer);
 
-                GPTBuffer.AddRange(HeaderBuffer);
-                GPTBuffer.AddRange(HeaderPaddingBuffer);
+                gptBuffer.AddRange(headerBuffer);
+                gptBuffer.AddRange(headerPaddingBuffer);
             }
             else
             {
-                GPTBuffer.AddRange(HeaderBuffer);
-                GPTBuffer.AddRange(HeaderPaddingBuffer);
+                gptBuffer.AddRange(headerBuffer);
+                gptBuffer.AddRange(headerPaddingBuffer);
 
-                GPTBuffer.AddRange(PartitionTableBuffer);
-                GPTBuffer.AddRange(PartitionTablePaddingBuffer);
+                gptBuffer.AddRange(partitionTableBuffer);
+                gptBuffer.AddRange(partitionTablePaddingBuffer);
             }
 
-            return GPTBuffer.ToArray();
+            return gptBuffer.ToArray();
         }
     }
 }
