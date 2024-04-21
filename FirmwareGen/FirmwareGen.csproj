@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<TargetFramework>net8.0-windows</TargetFramework>
 		<OutputType>Exe</OutputType>
@@ -8,6 +8,8 @@
 		<CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
 		<Platforms>AnyCPU;x64;x86;ARM64</Platforms>
 		<ApplicationManifest>app.manifest</ApplicationManifest>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<WarningsAsErrors>NU1605;SYSLIB0011</WarningsAsErrors>
 	</PropertyGroup>
 	<ItemGroup>
 	  <None Remove="DeviceProfiles\EpsilonHalfSplit128GB.xml" />
