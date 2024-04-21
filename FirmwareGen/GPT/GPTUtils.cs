@@ -124,32 +124,3 @@ namespace FirmwareGen.GPT
             return new byte[0];  // Placeholder
         }
     }
-
-    internal struct GPTPartition
-    {
-        public Guid TypeGUID;
-        public Guid UID;
-        public ulong FirstLBA;
-        public ulong LastLBA;
-        public ulong Attributes;
-        public string Name;
-    }
-
-    internal struct GPTHeader
-    {
-        public string Signature;
-        public uint Revision;
-        public uint Size;
-        public uint CRC32;
-        public uint Reserved;
-        public ulong CurrentLBA;
-        public ulong BackupLBA;
-        public ulong FirstUsableLBA;
-        public ulong LastUsableLBA;
-        public Guid DiskGUID;
-        public ulong PartitionArrayLBA;
-        public uint PartitionEntryCount;
-        public uint PartitionEntrySize;
-        public uint PartitionArrayCRC32;
-    }
-}
