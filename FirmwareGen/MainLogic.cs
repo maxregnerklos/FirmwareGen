@@ -11,6 +11,7 @@ namespace FirmwareGen
             const string Img2Ffu = "Img2Ffu.exe";
             const string DriverUpdater = "DriverUpdater.exe";
 
+            // Verify the existence of necessary components
             if (!File.Exists(wimlib))
             {
                 Logging.Log($"Some components could not be found: {wimlib}", Logging.LoggingLevel.Error);
@@ -39,12 +40,15 @@ namespace FirmwareGen
             const string DriverUpdater = "DriverUpdater.exe";
             const string SystemPartition = "Y:";
 
+            // Deserialize device profile from the provided options
             DeviceProfile deviceProfile = XmlUtils.Deserialize<DeviceProfile>(options.DeviceProfile);
 
+            // Create a temporary VHD and mount it
             string TmpVHD = CommonLogic.GetBlankVHD(deviceProfile);
             string DiskId = VolumeUtils.MountVirtualHardDisk(TmpVHD, false);
             string VHDLetter = VolumeUtils.GetVirtualHardDiskLetterFromDiskID(DiskId);
 
+            // Apply the Windows image to the VHD
             VolumeUtils.ApplyWindowsImageFromDVD(wimlib, options.WindowsDVD, options.WindowsIndex, VHDLetter);
             VolumeUtils.PerformSlabOptimization(VHDLetter);
             VolumeUtils.ApplyCompactFlagsToImage(VHDLetter);
@@ -52,6 +56,7 @@ namespace FirmwareGen
             VolumeUtils.ConfigureBootManager(VHDLetter, SystemPartition);
             VolumeUtils.UnmountSystemPartition(DiskId, SystemPartition);
 
+            // Apply supplementary BCD commands if available
             if (deviceProfile.SupplementaryBCDCommands.Length > 0)
             {
                 VolumeUtils.MountSystemPartition(DiskId, SystemPartition);
@@ -59,41 +64,24 @@ namespace FirmwareGen
                 Logging.Log("Configuring supplemental boot");
                 foreach (string command in deviceProfile.SupplementaryBCDCommands)
                 {
-                    VolumeUtils.RunProgram("bcdedit.exe", $"{$@"/store {SystemPartition}\EFI\Microsoft\Boot\BCD "}{command}");
+                    VolumeUtils.RunProgram("bcdedit.exe", $@"/store {SystemPartition}\EFI\Microsoft\Boot\BCD {command}");
                 }
 
                 VolumeUtils.UnmountSystemPartition(DiskId, SystemPartition);
             }
 
+            // Add drivers to the VHD
             Logging.Log("Adding drivers");
             VolumeUtils.RunProgram(DriverUpdater, $@"-d ""{options.DriverPack}{deviceProfile.DriverDefinitionPath}"" -r ""{options.DriverPack}"" -p ""{VHDLetter}""");
 
-            // Add ARM64-specific optimizations
-            if (deviceProfile.Architecture == "ARM64")
-            {
-                Logging.Log("Applying ARM64-specific optimizations");
-                VolumeUtils.RunProgram("dism.exe", $@"/Image:{VHDLetter} /Set-OptimalPerformanceForARM64");
-                VolumeUtils.RunProgram("dism.exe", $@"/Image:{VHDLetter} /Enable-Feature /FeatureName:HypervisorPlatform");
-            }
-
-            // Add modern Windows features
-            Logging.Log("Adding modern Windows features");
-            VolumeUtils.RunProgram("dism.exe", $@"/Image:{VHDLetter} /Enable-Feature /FeatureName:NetFX3");
-            VolumeUtils.RunProgram("dism.exe", $@"/Image:{VHDLetter} /Enable-Feature /FeatureName:Microsoft-Windows-Subsystem-Linux");
-            VolumeUtils.RunProgram("dism.exe", $@"/Image:{VHDLetter} /Enable-Feature /FeatureName:VirtualMachinePlatform");
-
-            // Apply latest cumulative update if available
-            if (File.Exists(options.LatestCumulativeUpdate))
-            {
-                Logging.Log("Applying latest cumulative update");
-                VolumeUtils.RunProgram("dism.exe", $@"/Image:{VHDLetter} /Add-Package /PackagePath:""{options.LatestCumulativeUpdate}""");
-            }
-
+            // Dismount the VHD
             VolumeUtils.DismountVirtualHardDisk(TmpVHD);
 
+            // Generate the FFU file
             Logging.Log("Making FFU");
             VolumeUtils.RunProgram(Img2Ffu, $@"-i {TmpVHD} -f ""{options.Output}\{deviceProfile.FFUFileName}"" -c {deviceProfile.DiskSectorSize * 4} -s {deviceProfile.DiskSectorSize} -p ""{string.Join(";", deviceProfile.PlatformIDs)}"" -o {options.WindowsVer} -b 4000");
 
+            // Delete the temporary VHD
             Logging.Log("Deleting Temp VHD");
             File.Delete(TmpVHD);
         }
