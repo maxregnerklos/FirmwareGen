@@ -8,9 +8,10 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 200  # Set this to a reasonable limit based on your build time
     strategy:
       matrix:
-        target: [win-x86,win-x64,win-arm64]
+        target: [win-x86, win-x64, win-arm64]
         include:
           - target: win-x86
             platform: win
